@@ -1,9 +1,9 @@
 #define dirPin 7
 #define stepPin 8
 #define stepsPerRevolution 200
-#define maxSpeed 2000 //minimalny czas pomiędzy krokami w us
+#define maxSpeed 1000 //minimalny czas pomiędzy krokami w us
 
-uint16_t speed = 2000; //dodatkowy czas pomiędzy krokami w us
+uint16_t speed = 0; //dodatkowy czas pomiędzy krokami w us
 int prev_angle = 0;
 int angle = 0;
 
