@@ -24,7 +24,8 @@ void stepper_task(void *pvParameters) {
     gpio_set_level(DIR_PIN, 1); 
 
     printf("Stepper Task: Start na Core 1. Predkosc: %d us\n", STEP_DELAY_US);
-
+    
+    // Licznik kroków do ochrony przed watchdogiem
     int step_counter = 0;
 
     // 3. Główna pętla ruchu
