@@ -9,10 +9,11 @@
 #define DIR_PIN  GPIO_NUM_26
 
 // --- MAKSYMALNA PRĘDKOŚĆ ---
-// Czas pomiędzy impulsami w mikrosekundach (700 us = 0.7 ms)
+// Czast trwania jednego kroku w us
 #define STEP_DELAY_US 1200 
 
 void stepper_task(void *pvParameters) {
+
     // 1. Inicjalizacja pinów
     gpio_reset_pin(STEP_PIN);
     gpio_reset_pin(DIR_PIN);
@@ -28,30 +29,28 @@ void stepper_task(void *pvParameters) {
 
     // 3. Główna pętla ruchu
     while (1) {
-        // --- Generowanie impulsu ---
-        gpio_set_level(STEP_PIN, 1);
-        
-        // Czekamy 10 mikrosekund (A4988 potrzebuje chwili, by zarejestrować stan wysoki)
-        esp_rom_delay_us(10); 
-        
-        gpio_set_level(STEP_PIN, 0);
+        while (1) {
+            // --- Generowanie impulsu ---
+            gpio_set_level(STEP_PIN, 1);
+            // Delay aby step był widoczny (minimalny czas trwania impulsu)
+            esp_rom_delay_us(10);
+            gpio_set_level(STEP_PIN, 0);
+            // Odczekujemy resztę czasu trwania kroku
+            esp_rom_delay_us(STEP_DELAY_US - 10);
+        }
 
-        // Odczekujemy resztę czasu do naszych 700 mikrosekund (700 - 10 = 690 us)
-        esp_rom_delay_us(STEP_DELAY_US - 10);
-
-        // --- OCHRONA PRZED RESETEM (WATCHDOG) ---
-        // Ponieważ esp_rom_delay_us całkowicie blokuje rdzeń, musimy co jakiś czas
-        // oddać kontrolę systemowi operacyjnemu, by Watchdog nas nie zresetował.
+        // --- OCHRONA PRZED WATCHDOGIEM ---
+        // Co 1000 kroków dajemy systemowi milisekundę na oddech (aby nie wywołać watchdog timer)
         step_counter++;
-        if (step_counter >= 1000) { // Co 1000 kroków (czyli co ~0.7 sekundy)
-            vTaskDelay(pdMS_TO_TICKS(1)); // Dajemy systemowi 1 milisekundę na "oddech"
+        if (step_counter >= 1000) { 
+            vTaskDelay(pdMS_TO_TICKS(1)); 
             step_counter = 0;
         }
     }
 }
 
 void app_main(void) {
-    printf("System uruchomiony. Test maksymalnej predkosci silnika (700us)...\n");
+    printf("System uruchomiony.\n");
 
     xTaskCreatePinnedToCore(
         stepper_task, 
@@ -60,7 +59,7 @@ void app_main(void) {
         NULL, 
         5, 
         NULL, 
-        1  // Zadanie działa samotnie na Rdzeniu 1
+        1  // Nr rdzenia do zadania
     );
 
     while (1) {
