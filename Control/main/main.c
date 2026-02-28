@@ -8,9 +8,13 @@
 #define STEP_PIN GPIO_NUM_25
 #define DIR_PIN  GPIO_NUM_26
 
-// --- MAKSYMALNA PRĘDKOŚĆ ---
-// Czast trwania jednego kroku w us
+// --- PARAMETRY ---
+// Czast trwania jednego kroku w us (max. speed)
 #define STEP_DELAY_US 1200 
+// Maksymalna liczba kroków w jedną stronę (200 kroków na 360 deg silnika * 20 obroków wału)
+#define MAX_STEPS 4000
+
+
 
 void stepper_task(void *pvParameters) {
 
@@ -24,14 +28,21 @@ void stepper_task(void *pvParameters) {
     gpio_set_level(DIR_PIN, 1); 
 
     printf("Stepper Task: Start na Core 1. Predkosc: %d us\n", STEP_DELAY_US);
-    
+
     // Licznik kroków do ochrony przed watchdogiem
     int step_counter = 0;
 
     // 3. Główna pętla ruchu
     while (1) {
-        while (1) {
+        // Przełożenie przekładni 1:20 => 1 obrót silnika = 1/20 obrotu całości
+        // 4000 kroków na obrót 360 => 1 krok = 0.09 stopnia
+        float received_degree = 90.0f; 
+        int deg_to_steps = received_degree / 0.09f;
+
+        for (int i = 0; i < deg_to_steps; i++) { 
             // --- Generowanie impulsu ---
+            
+
             gpio_set_level(STEP_PIN, 1);
             // Delay aby step był widoczny (minimalny czas trwania impulsu)
             esp_rom_delay_us(10);
