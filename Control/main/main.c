@@ -32,17 +32,31 @@ void stepper_task(void *pvParameters) {
     // Licznik kroków do ochrony przed watchdogiem
     int step_counter = 0;
 
+    int current_abs_pos = 0; // Aktualna pozycja w krokach (0 do MAX_STEPS/2)
+    bool direction = true; // true = w prawo, false = w lewo
+
     // 3. Główna pętla ruchu
     while (1) {
         // Przełożenie przekładni 1:20 => 1 obrót silnika = 1/20 obrotu całości
         // 4000 kroków na obrót 360 => 1 krok = 0.09 stopnia
         float received_degree = 90.0f; 
         int deg_to_steps = received_degree / 0.09f;
+        
+        if (current_abs_pos + deg_to_steps > MAX_STEPS / 2) {
+            // Jeśli przekroczymy połowę zakresu, zmieniamy kierunek
+            gpio_set_level(DIR_PIN, 0); 
+            deg_to_steps = (MAX_STEPS / 2) - current_abs_pos; // Kroki do końca zakresu
+            direction = false;
+        } else if (current_abs_pos - deg_to_steps < -MAX_STEPS / 2) {
+            // Jeśli przekroczymy drugą połowę zakresu, zmieniamy kierunek
+            gpio_set_level(DIR_PIN, 1); 
+            deg_to_steps = current_abs_pos + (MAX_STEPS / 2); // Kroki do końca zakresu
+            direction = true;
+        }
 
         for (int i = 0; i < deg_to_steps; i++) { 
             // --- Generowanie impulsu ---
-            
-
+        
             gpio_set_level(STEP_PIN, 1);
             // Delay aby step był widoczny (minimalny czas trwania impulsu)
             esp_rom_delay_us(10);
@@ -50,7 +64,8 @@ void stepper_task(void *pvParameters) {
             // Odczekujemy resztę czasu trwania kroku
             esp_rom_delay_us(STEP_DELAY_US - 10);
         }
-
+        current_abs_pos += deg_to_steps * (direction ? 1 : -1); // Aktualizujemy pozycję
+        
         // --- OCHRONA PRZED WATCHDOGIEM ---
         // Co 1000 kroków dajemy systemowi milisekundę na oddech (aby nie wywołać watchdog timer)
         step_counter++;
