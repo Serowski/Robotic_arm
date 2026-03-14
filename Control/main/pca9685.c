@@ -192,10 +192,10 @@ esp_err_t pca9685_set_pwm(pca9685_t *pca, uint8_t channel, uint16_t on, uint16_t
 }
 
 // --- USTAWIENIE KĄTA SERWOMECHANIZMU ---
-// Dla standardowego serwomechanizmu RC:
-// - 0° -> ~1ms impuls (~205 @ 50Hz)
-// - 90° -> ~1.5ms impuls (~307 @ 50Hz)
-// - 180° -> ~2ms impuls (~410 @ 50Hz)
+// Dla serwomechanizmu RC (dostosowany):
+// - 0° -> 700us impuls (~143 @ 50Hz)
+// - 90° -> ~1500us impuls (~307 @ 50Hz)
+// - 180° -> 2300us impuls (~471 @ 50Hz)
 esp_err_t pca9685_set_servo_angle(pca9685_t *pca, uint8_t channel, float angle)
 {
     if (channel >= PCA9685_CHANNELS)
@@ -208,8 +208,8 @@ esp_err_t pca9685_set_servo_angle(pca9685_t *pca, uint8_t channel, float angle)
     angle = (angle < 0) ? 0 : (angle > 180) ? 180
                                             : angle;
 
-    // Mapowanie: 0° = 205, 180° = 410 @ 50Hz
-    uint16_t pwm_value = (uint16_t)(205 + (angle / 180.0f) * 205);
+    // Mapowanie: 0° = 143, 180° = 471 @ 50Hz
+    uint16_t pwm_value = (uint16_t)(143 + (angle / 180.0f) * 328);
 
     // Ustaw ON = 0, OFF = wartość PWM
     return pca9685_set_pwm(pca, channel, 0, pwm_value);
