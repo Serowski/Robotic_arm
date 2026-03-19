@@ -303,15 +303,17 @@ void servo_task(void *pvParameters)
                        servo_cmd.channel, esp_err_to_name(err));
             }
             */
-            int duration_ms = 1500;
+
             float start_angle = current_servo_angle[servo_cmd.channel];
+            int duration_ms = 1000 * (3 - 2 * cos(PI * (servo_cmd.angle - start_angle) / 180));
             int refresh_time_ms = 20;
             int steps = duration_ms / refresh_time_ms;
 
             for (int i = 0; i <= steps; i++)
             {
-                float progress = (float)i / (float)steps; // progres od 0 do 1
-                float move = (1.0f - cos(progress * PI)) / 2.0f;
+                float p = (float)i / (float)steps; // progres od 0 do 1
+                // float move = (1.0f - cos(progress * PI)) / 2.0f;
+                float move = 6.0f * p * p * p * p * p - 15.0f * p * p * p * p + 10.0f * p * p * p;
                 float current_step_angle = start_angle + (servo_cmd.angle - start_angle) * move;
                 pca9685_set_servo_angle(&pca9685, servo_cmd.channel, current_step_angle);
                 vTaskDelay(pdMS_TO_TICKS(refresh_time_ms));
