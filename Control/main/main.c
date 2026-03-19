@@ -6,14 +6,14 @@
 #include <string.h>
 #include "driver/uart.h"
 #include "driver/i2c.h"
-
+#include "math.h"
 #include "freertos/queue.h"
 #include "pca9685.h"
 
 QueueHandle_t stepper_queue;
 QueueHandle_t servo_queue;
 pca9685_t pca9685;
-
+float current_servo_angle[16] = {0.0f};
 // --- KONFIGURACJA UART ---
 #define UART_PORT_NUM UART_NUM_0 // Domyślny port podłączony do USB
 #define UART_BAUD_RATE 115200    // Prędkość komunikacji (standard dla ESP-IDF)
@@ -33,6 +33,7 @@ pca9685_t pca9685;
 #define MIN_DELAY_US 1300
 #define DELAY_CHANGE 4
 
+#define PI 3.141592
 // --- FUNKCJE DIAGNOSTYCZNE ---
 
 // Skanowanie I2C
@@ -289,7 +290,9 @@ void servo_task(void *pvParameters)
             }
 
             // Ustaw kąt serwomechanizmu
-            esp_err_t err = pca9685_set_servo_angle(&pca9685, servo_cmd.channel, servo_cmd.angle);
+            // esp_err_t err = pca9685_set_servo_angle(&pca9685, servo_cmd.channel, servo_cmd.angle);
+            // esp_err_t err = soft_move_servo(&pca9685, servo_cmd.channel, servo_cmd.angle, 1500);
+            /*
             if (err == ESP_OK)
             {
                 printf("Kanał %d: Serwomechanizm ustawiony na %.2f°\n", servo_cmd.channel, servo_cmd.angle);
@@ -299,10 +302,43 @@ void servo_task(void *pvParameters)
                 printf("BLAD przy ustawianiu serwomechanizmu na kanale %d: %s\n",
                        servo_cmd.channel, esp_err_to_name(err));
             }
+            */
+            int duration_ms = 1500;
+            float start_angle = current_servo_angle[servo_cmd.channel];
+            int refresh_time_ms = 20;
+            int steps = duration_ms / refresh_time_ms;
+
+            for (int i = 0; i <= steps; i++)
+            {
+                float progress = (float)i / (float)steps; // progres od 0 do 1
+                float move = (1.0f - cos(progress * PI)) / 2.0f;
+                float current_step_angle = start_angle + (servo_cmd.angle - start_angle) * move;
+                pca9685_set_servo_angle(&pca9685, servo_cmd.channel, current_step_angle);
+                vTaskDelay(pdMS_TO_TICKS(refresh_time_ms));
+            }
+            current_servo_angle[servo_cmd.channel] = servo_cmd.angle;
         }
     }
 }
-
+/*
+esp_err_t soft_move_servo(pca9685_t *pca, uint8_t channel, float angle, int duration_ms)
+{
+    float start_angle = current_servo_angle[channel];
+    int refresh_time_ms = 20;
+    int steps = duration_ms / refresh_time_ms;
+    if (angle > 180.0f)
+        return false;
+    for (int i = 0; i <= steps; i++)
+    {
+        float progress = (float)i / (float)steps; // progres od 0 do 1
+        float move = (1.0f - cos(progress * PI)) / 2.0f;
+        float current_step_angle = start_angle + (angle - start_angle) * move;
+        pca9685_set_servo_angle(&pca, channel, current_step_angle);
+        vTaskDelay(pdMS_TO_TICKS(refresh_time_ms));
+    }
+    current_servo_angle[channel] = angle;
+}
+*/
 // --- ZADANIE KOMUNIKACYJNE UART (Core 0) ---
 void uart_task(void *pvParameters)
 {
