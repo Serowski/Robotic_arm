@@ -264,7 +264,7 @@ void stepper_task(void *pvParameters)
 // --- ZADANIE SERWOMECHANIZMÓW (Core 1) ---
 void servo_task(void *pvParameters)
 {
-    servo_command_t servo_cmd;
+    servo_command_t servo_cmd_0;
 
     printf("\nRdzen 1: Serwomechanizmy zainicjalizowane na kanałach 0-15.\n");
     printf("Czasowe opóźnienie na starcie...\n");
@@ -273,19 +273,19 @@ void servo_task(void *pvParameters)
     while (1)
     {
         // Czekaj na komendę serwomechanizmu
-        if (xQueueReceive(servo_queue, &servo_cmd, portMAX_DELAY) == pdPASS)
+        if (xQueueReceive(servo_queue, &servo_cmd_0, portMAX_DELAY) == pdPASS)
         {
             // Waliduj kanał
-            if (servo_cmd.channel >= 16)
+            if (servo_cmd_0.channel >= 16)
             {
-                printf("BLAD: Kanał spoza zakresu (0-15): %d\n", servo_cmd.channel);
+                printf("BLAD: Kanał spoza zakresu (0-15): %d\n", servo_cmd_0.channel);
                 continue;
             }
 
             // Waliduj kąt
-            if (servo_cmd.angle < 0.0f || servo_cmd.angle > 180.0f)
+            if (servo_cmd_0.angle < 0.0f || servo_cmd_0.angle > 180.0f)
             {
-                printf("BLAD: Kąt spoza zakresu (0-180): %.2f\n", servo_cmd.angle);
+                printf("BLAD: Kąt spoza zakresu (0-180): %.2f\n", servo_cmd_0.angle);
                 continue;
             }
 
@@ -304,8 +304,8 @@ void servo_task(void *pvParameters)
             }
             */
 
-            float start_angle = current_servo_angle[servo_cmd.channel];
-            int duration_ms = 1000 * (3 - 2 * cos(PI * (servo_cmd.angle - start_angle) / 180));
+            float start_angle = current_servo_angle[servo_cmd_0.channel];
+            int duration_ms = 1000 * (3 - 2 * cos(PI * (servo_cmd_0.angle - start_angle) / 180));
             int refresh_time_ms = 20;
             int steps = duration_ms / refresh_time_ms;
 
@@ -314,11 +314,11 @@ void servo_task(void *pvParameters)
                 float p = (float)i / (float)steps; // progres od 0 do 1
                 // float move = (1.0f - cos(progress * PI)) / 2.0f;
                 float move = 6.0f * p * p * p * p * p - 15.0f * p * p * p * p + 10.0f * p * p * p;
-                float current_step_angle = start_angle + (servo_cmd.angle - start_angle) * move;
-                pca9685_set_servo_angle(&pca9685, servo_cmd.channel, current_step_angle);
+                float current_step_angle = start_angle + (servo_cmd_0.angle - start_angle) * move;
+                pca9685_set_servo_angle(&pca9685, servo_cmd_0.channel, current_step_angle);
                 vTaskDelay(pdMS_TO_TICKS(refresh_time_ms));
             }
-            current_servo_angle[servo_cmd.channel] = servo_cmd.angle;
+            current_servo_angle[servo_cmd_0.channel] = servo_cmd_0.angle;
         }
     }
 }
@@ -433,6 +433,30 @@ void uart_task(void *pvParameters)
                         else
                         {
                             printf("Blad skladni. Uzyj formatu: SV <0-15> <0-180> (np. SV 0 90)\n> ");
+                        }
+                    }
+                    else if (strncmp(rx_buf, "SS", 2) == 0)
+                    {
+                        // Komenda Servo: SV <channel> <angle>
+                        uint8_t channel[3] = {0};
+                        float angle[3] = {0.0f};
+
+                        if (sscanf(rx_buf, "SS %hhu %f %hhu %f %hhu %f", &channel[0], &angle[0], &channel[1], &angle[1], &channel[2], &angle[2]) == 6)
+                        {
+                            servo_command_t servo_cmd_0 = {.channel = channel[0], .angle = angle[0]};
+                            servo_command_t servo_cmd_1 = {.channel = channel[1], .angle = angle[1]};
+                            servo_command_t servo_cmd_2 = {.channel = channel[2], .angle = angle[2]};
+                            xQueueSend(servo_queue, &servo_cmd_0, 0);
+                            xQueueSend(servo_queue, &servo_cmd_1, 0);
+                            xQueueSend(servo_queue, &servo_cmd_2, 0);
+
+                            printf("Wysłano do wszystkich: kanał %d, kąt %.2f°\n> ", channel[0], angle[0]);
+                            printf("->                     kanał %d, kąt %.2f°\n> ", channel[1], angle[1]);
+                            printf("->                     kanał %d, kąt %.2f°\n> ", channel[2], angle[2]);
+                        }
+                        else
+                        {
+                            printf("Blad skladni. Uzyj formatu: SS <0-15> <0-180> <0-15> <0-180> <0-15> <0-180>\n> ");
                         }
                     }
                     else if (rx_buf[0] == 'S')
