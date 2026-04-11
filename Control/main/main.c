@@ -9,6 +9,7 @@
 #include "math.h"
 #include "freertos/queue.h"
 #include "pca9685.h"
+#include "wifi_TCP.h"
 
 QueueHandle_t stepper_queue;
 QueueHandle_t servo_queue;
@@ -217,9 +218,6 @@ void stepper_task(void *pvParameters)
     int move_steps = 0;
     float received_degree = 0.0f;
 
-    // --- SYMULACJA ODBIERANIA DANYCH ---
-    bool test = true;
-
     //  Główna pętla ruchu
     while (1)
     {
@@ -308,7 +306,7 @@ void servo_task(void *pvParameters)
             int duration_ms = 1000 * (3 - 2 * cos(PI * (servo_cmd_0.angle - start_angle) / 180));
             int refresh_time_ms = 20;
             int steps = duration_ms / refresh_time_ms;
-
+            printf("Odebrany kąt: %.2f\n", servo_cmd_0.angle);
             for (int i = 0; i <= steps; i++)
             {
                 float p = (float)i / (float)steps; // progres od 0 do 1
@@ -322,25 +320,7 @@ void servo_task(void *pvParameters)
         }
     }
 }
-/*
-esp_err_t soft_move_servo(pca9685_t *pca, uint8_t channel, float angle, int duration_ms)
-{
-    float start_angle = current_servo_angle[channel];
-    int refresh_time_ms = 20;
-    int steps = duration_ms / refresh_time_ms;
-    if (angle > 180.0f)
-        return false;
-    for (int i = 0; i <= steps; i++)
-    {
-        float progress = (float)i / (float)steps; // progres od 0 do 1
-        float move = (1.0f - cos(progress * PI)) / 2.0f;
-        float current_step_angle = start_angle + (angle - start_angle) * move;
-        pca9685_set_servo_angle(&pca, channel, current_step_angle);
-        vTaskDelay(pdMS_TO_TICKS(refresh_time_ms));
-    }
-    current_servo_angle[channel] = angle;
-}
-*/
+
 // --- ZADANIE KOMUNIKACYJNE UART (Core 0) ---
 void uart_task(void *pvParameters)
 {
@@ -504,7 +484,6 @@ void uart_task(void *pvParameters)
 
 void app_main(void)
 {
-    // printf("System uruchomiony.\n");
     printf("\n--- START SYSTEMU ---\n");
 
     // 1. Tworzymy kolejkę dla steppera
@@ -517,7 +496,7 @@ void app_main(void)
     if (stepper_queue == NULL || servo_queue == NULL)
     {
         printf("BLAD KRYTYCZNY: Nie udalo sie utworzyc kolejek w pamieci!\n");
-        return; // Zatrzymujemy działanie, żeby uniknąć crasha
+        return;
     }
 
     // 3. Inicjalizacja PCA9685
@@ -528,7 +507,6 @@ void app_main(void)
         printf("BLAD KRYTYCZNY: Nie udalo sie zainicjalizowac PCA9685: %s\n", esp_err_to_name(err));
         printf("\nZACZYNAM DIAGNOSTYKE...\n");
 
-        // Konfiguracja I2C dla skanowania
         i2c_config_t conf = {
             .mode = I2C_MODE_MASTER,
             .sda_io_num = SDA_PIN,
@@ -540,23 +518,18 @@ void app_main(void)
         i2c_param_config(I2C_PORT, &conf);
         i2c_driver_install(I2C_PORT, I2C_MODE_MASTER, 0, 0, 0);
 
-        // Skanuj magistralę I2C
         scan_i2c_devices(I2C_PORT);
 
         printf("SPRAWDZ:\n");
         printf("  1. Czy PCA9685 jest zasilany (5V)?\n");
         printf("  2. Czy piny I2C (GPIO21/22) sa poprawnie polaczone?\n");
         printf("  3. Czy adres to 0x40 (sprawdz skocznikami)?\n");
-        printf("\nWyprobuj komende SCAN w UART aby sprawdzic magistrale.\n");
 
-        // Kontynuuj bez serw
         printf("\nKontynuujem bez serwomechanizmów...\n");
     }
     else
     {
         printf("PCA9685 zainicjalizowany pomyslnie!\n");
-
-        // Diagnostyka przy starcie
         printf("\n--- DIAGNOSTYKA NA STARCIE ---\n");
         debug_pca9685_status(&pca9685);
 
@@ -564,6 +537,15 @@ void app_main(void)
         test_servo_channel(&pca9685, 0, 90.0f);
     }
 
+    // 4. Inicjalizacja WiFi
+    printf("\n--- INICJALIZACJA WiFi ---\n");
+    err = wifi_init();
+    if (err != ESP_OK)
+    {
+        printf("OSTRZEŻENIE: Nie udalo sie zainicjalizowac WiFi\n");
+    }
+
+    // Uruchomienie zadań
     xTaskCreatePinnedToCore(
         stepper_task,
         "stepper_task",
@@ -571,8 +553,7 @@ void app_main(void)
         NULL,
         5,
         NULL,
-        1 // Nr rdzenia do zadania
-    );
+        1);
 
     xTaskCreatePinnedToCore(
         servo_task,
@@ -581,16 +562,14 @@ void app_main(void)
         NULL,
         5,
         NULL,
-        1 // Nr rdzenia do zadania
-    );
+        1);
 
     xTaskCreatePinnedToCore(
-        uart_task,
-        "uart_task",
-        4096,
+        wifi_tcp_task,
+        "wifi_tcp_task",
+        8192,
         NULL,
-        5,
+        4,
         NULL,
-        0 // Rdzeń 0!
-    );
+        0);
 }
