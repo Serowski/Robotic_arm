@@ -12,7 +12,6 @@ def receive_from_esp(client):
                 print("ESP32 się rozłączył")
                 break
             print(f"\n   < ESP32 odpisał: {data.decode().strip()}")
-            #print("> Wpisz komendę: ", end="", flush=True)
         except:
             break
 
